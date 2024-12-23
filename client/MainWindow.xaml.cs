@@ -1,25 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+﻿using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.IO.Ports;
 
 namespace TicTacToeWPF
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
         private SerialPort serialPort;
@@ -34,33 +20,45 @@ namespace TicTacToeWPF
         {
             InitializeComponent();
 
-            gameButtons = new List<Button>();
+            var comPortSelectionWindow = new ComPortSelectionWindow();
+            bool? dialogResult = comPortSelectionWindow.ShowDialog();
 
-            gameButtons.Add(A1);
-            gameButtons.Add(A2);
-            gameButtons.Add(A3);
+            if (dialogResult == true)
+            {
+                string selectedPort = comPortSelectionWindow.SelectedPort;
 
-            gameButtons.Add(B1);
-            gameButtons.Add(B2);
-            gameButtons.Add(B3);
+                gameButtons = new List<Button>();
 
-            gameButtons.Add(C1);
-            gameButtons.Add(C2);
-            gameButtons.Add(C3);
+                gameButtons.Add(A1);
+                gameButtons.Add(A2);
+                gameButtons.Add(A3);
 
-            SetupCOM();
+                gameButtons.Add(B1);
+                gameButtons.Add(B2);
+                gameButtons.Add(B3);
+
+                gameButtons.Add(C1);
+                gameButtons.Add(C2);
+                gameButtons.Add(C3);
+
+                SetupCOM(selectedPort);
+            }
+            else
+            {
+                Application.Current.Shutdown();
+            }
 
         }
 
-        private void SetupCOM()
+        private void SetupCOM(string portName)
         {
-            serialPort = new SerialPort("COM3", 9600);  // Adjust port as needed
+            serialPort = new SerialPort(portName, 9600);
             serialPort.DataReceived += SerialPort_DataReceived;
 
             try
             {
                 serialPort.Open();
-                MessageBox.Show("Serial port opened successfully.");
+                MessageBox.Show("Serial port " + portName + " opened successfully.");
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -83,7 +81,6 @@ namespace TicTacToeWPF
                 MessageBox.Show("Error opening COM port: " + ex.Message);
             }
 
-            // Ensure the port is closed when the application exits
             this.Closed += MainWindow_Closed;
         }
 
@@ -108,13 +105,11 @@ namespace TicTacToeWPF
 
         private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
-            // Read the message from Arduino when data is received
             string receivedMessage = serialPort.ReadLine();
 
-            // Process the response from Arduino (this could be to display it or take further action)
             Dispatcher.Invoke(() =>
             {
-                MessageBox.Show("Arduino says: " + receivedMessage);  // Display the response from Arduino
+                MessageBox.Show("Arduino says: " + receivedMessage);
             });
         }
 
