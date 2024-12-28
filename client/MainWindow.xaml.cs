@@ -3,17 +3,45 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.IO.Ports;
+using System.Runtime.Versioning;
 
 namespace TicTacToeWPF
 {
+    /// <summary>
+    /// Main window class for the Tic-Tac-Toe WPF application that handles game logic and serial communication
+    /// with an external server.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
     public partial class MainWindow : Window
     {
+        /// <summary>
+        /// Serial port instance used for communication with the game server.
+        /// </summary>
         public SerialPort serialPort;
-        public static bool TURN = true;  // true = X / false = O
+
+        /// <summary>
+        /// Indicates current player's turn. True represents X's turn, false represents O's turn.
+        /// </summary>
+        public static bool TURN = true;
+
+        /// <summary>
+        /// Flag indicating whether an AI vs AI game is currently in progress.
+        /// </summary>
         private bool isAiVsAiGameActive = false;
+
+        /// <summary>
+        /// Current game mode. Defaults to hot seat mode (see Constants.HOT_SEAT_MODE).
+        /// </summary>
         public static int MODE = Constants.HOT_SEAT_MODE;
+
+        /// <summary>
+        /// List containing all game board buttons for easy access and manipulation.
+        /// </summary>
         public List<Button> gameButtons;
 
+        /// <summary>
+        /// Initializes the main window, sets up COM port connection, and initializes the game board.
+        /// </summary>
         public MainWindow()
         {
             InitializeComponent();
@@ -33,6 +61,10 @@ namespace TicTacToeWPF
             }
         }
 
+        /// <summary>
+        /// Initializes the game board buttons by adding them to the gameButtons list.
+        /// This method is called during window initialization.
+        /// </summary>
         public void InitializeGameButtons()
         {
             gameButtons = new List<Button>();
@@ -49,6 +81,10 @@ namespace TicTacToeWPF
             };
         }
 
+        /// <summary>
+        /// Sets up the serial port communication with the game server.
+        /// </summary>
+        /// <param name="portName">The name of the COM port to connect to</param>
         public void SetupCOM(string portName)
         {
             try
@@ -73,45 +109,10 @@ namespace TicTacToeWPF
             this.Closed += MainWindow_Closed;
         }
 
-        private void EnableAllButtons()
-        {
-            if (gameButtons == null) return;
-
-            foreach (Button button in gameButtons)
-            {
-                if (button != null)
-                {
-                    button.IsEnabled = true;
-                }
-            }
-        }
-
-        private void DisableAllButtons()
-        {
-            if (gameButtons == null) return;
-
-            foreach (Button button in gameButtons)
-            {
-                if (button != null)
-                {
-                    button.IsEnabled = false;
-                }
-            }
-        }
-
-        private void ClearAllButtons()
-        {
-            if (gameButtons == null) return;
-
-            foreach (Button button in gameButtons)
-            {
-                if (button != null)
-                {
-                    button.Content = "";
-                }
-            }
-        }
-
+        /// <summary>
+        /// Sends a command to the game server through the serial port.
+        /// </summary>
+        /// <param name="command">The command string to send</param>
         public void SendCommand(string command)
         {
             try
@@ -127,19 +128,11 @@ namespace TicTacToeWPF
             }
         }
 
-        private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
-        {
-            try
-            {
-                string message = serialPort.ReadLine().Trim();
-                Dispatcher.Invoke(() => ProcessServerResponse(message));
-            }
-            catch (Exception ex)
-            {
-                Dispatcher.Invoke(() => MessageBox.Show($"Error receiving data: {ex.Message}"));
-            }
-        }
-
+        /// <summary>
+        /// Processes responses received from the game server.
+        /// Handles different command types including AI moves, winner declarations, and ties.
+        /// </summary>
+        /// <param name="response">The response string received from the server</param>
         public void ProcessServerResponse(string response)
         {
             string[] parts = response.Split(',');
@@ -193,24 +186,12 @@ namespace TicTacToeWPF
             }
         }
 
-        private void EnableAiVsAiControls()
-        {
-            if (MODE == Constants.AI_VS_AI_MODE)
-            {
-                startButton.IsEnabled = true;
-                gameModeComboBox.IsEnabled = true;
-            }
-        }
-
-        private void DisableAiVsAiControls()
-        {
-            if (MODE == Constants.AI_VS_AI_MODE)
-            {
-                startButton.IsEnabled = false;
-                gameModeComboBox.IsEnabled = false;
-            }
-        }
-
+        /// <summary>
+        /// Event handler for game board button clicks.
+        /// Processes player moves and sends them to the server.
+        /// </summary>
+        /// <param name="sender">The button that was clicked</param>
+        /// <param name="e">Event arguments</param>
         public void gameAction_Click(object sender, RoutedEventArgs e)
         {
             Button clickedButton = (Button)sender;
@@ -226,6 +207,12 @@ namespace TicTacToeWPF
             SendCommand($"M,{row},{col}");
         }
 
+        /// <summary>
+        /// Event handler for the restart button.
+        /// Resets the game board while maintaining scores.
+        /// </summary>
+        /// <param name="sender">The button that was clicked</param>
+        /// <param name="e">Event arguments</param>
         private void onRestartButton_Click(object sender, EventArgs e)
         {
             isAiVsAiGameActive = false;
@@ -236,6 +223,12 @@ namespace TicTacToeWPF
             EnableAiVsAiControls();
         }
 
+        /// <summary>
+        /// Event handler for the game mode selection.
+        /// Updates the game mode and sends the change to the server.
+        /// </summary>
+        /// <param name="sender">The combo box that was changed</param>
+        /// <param name="e">Event arguments</param>
         private void gameModeComboBox_Click(object sender, SelectionChangedEventArgs e)
         {
             if (gameModeComboBox.SelectedIndex >= 0)
@@ -255,6 +248,12 @@ namespace TicTacToeWPF
             }
         }
 
+        /// <summary>
+        /// Event handler for the start button in AI vs AI mode.
+        /// Initiates an AI vs AI game session.
+        /// </summary>
+        /// <param name="sender">The button that was clicked</param>
+        /// <param name="e">Event arguments</param>
         private void startButton_Click(object sender, RoutedEventArgs e)
         {
             if (MODE == Constants.AI_VS_AI_MODE && !isAiVsAiGameActive)
@@ -268,6 +267,12 @@ namespace TicTacToeWPF
             }
         }
 
+        /// <summary>
+        /// Event handler for the new game button.
+        /// Resets the game board and all scores.
+        /// </summary>
+        /// <param name="sender">The button that was clicked</param>
+        /// <param name="e">Event arguments</param>
         private void newButton_Click(object sender, RoutedEventArgs e)
         {
             SendCommand("R");
@@ -279,7 +284,12 @@ namespace TicTacToeWPF
             ties.Content = "0";
         }
 
-        // Save/Load functionality remains unchanged as it's client-side only
+        /// <summary>
+        /// Event handler for the save button.
+        /// Saves the current game state to a file.
+        /// </summary>
+        /// <param name="sender">The button that was clicked</param>
+        /// <param name="e">Event arguments</param>
         private void saveButton_Click(object sender, RoutedEventArgs e)
         {
             StringBuilder sb = new StringBuilder();
@@ -300,6 +310,12 @@ namespace TicTacToeWPF
             MessageBox.Show("Game state saved!");
         }
 
+        /// <summary>
+        /// Event handler for the load button.
+        /// Loads a previously saved game state from a file.
+        /// </summary>
+        /// <param name="sender">The button that was clicked</param>
+        /// <param name="e">Event arguments</param>
         private void loadButton_Click(object sender, RoutedEventArgs e)
         {
             if (File.Exists("gameState.ini"))
@@ -330,6 +346,100 @@ namespace TicTacToeWPF
             }
         }
 
+        /// <summary>
+        /// Enables all buttons on the game board if they exist.
+        /// </summary>
+        private void EnableAllButtons()
+        {
+            if (gameButtons == null) return;
+            foreach (Button button in gameButtons)
+            {
+                if (button != null)
+                {
+                    button.IsEnabled = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Disables all buttons on the game board if they exist.
+        /// </summary>
+        private void DisableAllButtons()
+        {
+            if (gameButtons == null) return;
+            foreach (Button button in gameButtons)
+            {
+                if (button != null)
+                {
+                    button.IsEnabled = false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Clears the content of all buttons on the game board if they exist.
+        /// </summary>
+        private void ClearAllButtons()
+        {
+            if (gameButtons == null) return;
+            foreach (Button button in gameButtons)
+            {
+                if (button != null)
+                {
+                    button.Content = "";
+                }
+            }
+        }
+
+        /// <summary>
+        /// Event handler for serial port data reception.
+        /// Processes received data and updates the UI through the dispatcher.
+        /// </summary>
+        /// <param name="sender">The source of the event</param>
+        /// <param name="e">Event data</param>
+        private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        {
+            try
+            {
+                string message = serialPort.ReadLine().Trim();
+                Dispatcher.Invoke(() => ProcessServerResponse(message));
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() => MessageBox.Show($"Error receiving data: {ex.Message}"));
+            }
+        }
+
+        /// <summary>
+        /// Enables the AI vs AI control buttons when in AI vs AI mode.
+        /// </summary>
+        private void EnableAiVsAiControls()
+        {
+            if (MODE == Constants.AI_VS_AI_MODE)
+            {
+                startButton.IsEnabled = true;
+                gameModeComboBox.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Disables the AI vs AI control buttons when in AI vs AI mode.
+        /// </summary>
+        private void DisableAiVsAiControls()
+        {
+            if (MODE == Constants.AI_VS_AI_MODE)
+            {
+                startButton.IsEnabled = false;
+                gameModeComboBox.IsEnabled = false;
+            }
+        }
+
+        /// <summary>
+        /// Event handler for window closing.
+        /// Ensures proper cleanup of serial port connection.
+        /// </summary>
+        /// <param name="sender">The source of the event</param>
+        /// <param name="e">Event data</param>
         private void MainWindow_Closed(object sender, EventArgs e)
         {
             if (serialPort?.IsOpen == true)
