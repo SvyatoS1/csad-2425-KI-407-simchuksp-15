@@ -1,0 +1,44 @@
+name: Build Project
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+
+      - name: Setup arduino-cli
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\arduino-cli\arduino-cli.exe")) {
+            Invoke-WebRequest -Uri "https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Windows_64bit.zip" -OutFile "arduino-cli.zip"
+            Expand-Archive -Path "arduino-cli.zip" -DestinationPath "C:\arduino-cli"
+          }
+
+      - name: Setup Arduino core
+        shell: cmd
+        run: |
+          C:\arduino-cli\arduino-cli.exe config init
+          C:\arduino-cli\arduino-cli.exe core update-index
+          C:\arduino-cli\arduino-cli.exe core install arduino:avr
+
+      - name: Compile Arduino UNO project
+        shell: cmd
+        run: |
+          mkdir build
+          C:\arduino-cli\arduino-cli.exe compile --fqbn arduino:avr:uno --output-dir build server/server.ino
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: compiled-files
+          path: build/*.bin

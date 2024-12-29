@@ -8,17 +8,16 @@ namespace TicTacToeWPF
 {
     public partial class MainWindow : Window
     {
-        private SerialPort serialPort;
-        // true = X / false = 0
-        public static bool TURN = true;
-        // true = hot seat / false = AI
+        public SerialPort serialPort;
+        public static bool TURN = true;  // true = X / false = O
+        private bool isAiVsAiGameActive = false;
         public static int MODE = Constants.HOT_SEAT_MODE;
-
-        private List<Button> gameButtons;
+        public List<Button> gameButtons;
 
         public MainWindow()
         {
             InitializeComponent();
+            InitializeGameButtons(); // Initialize buttons first
 
             var comPortSelectionWindow = new ComPortSelectionWindow();
             bool? dialogResult = comPortSelectionWindow.ShowDialog();
@@ -26,402 +25,263 @@ namespace TicTacToeWPF
             if (dialogResult == true)
             {
                 string selectedPort = comPortSelectionWindow.SelectedPort;
-
-                gameButtons = new List<Button>();
-
-                gameButtons.Add(A1);
-                gameButtons.Add(A2);
-                gameButtons.Add(A3);
-
-                gameButtons.Add(B1);
-                gameButtons.Add(B2);
-                gameButtons.Add(B3);
-
-                gameButtons.Add(C1);
-                gameButtons.Add(C2);
-                gameButtons.Add(C3);
-
                 SetupCOM(selectedPort);
             }
             else
             {
                 Application.Current.Shutdown();
             }
-
         }
 
-        private void SetupCOM(string portName)
+        public void InitializeGameButtons()
         {
-            serialPort = new SerialPort(portName, 9600);
-            serialPort.DataReceived += SerialPort_DataReceived;
+            gameButtons = new List<Button>();
 
+            // Wait for window to load completely
+            this.Loaded += (s, e) =>
+            {
+                gameButtons.Clear(); // Clear any existing buttons
+                gameButtons.AddRange(new Button[] {
+                    A1, A2, A3,
+                    B1, B2, B3,
+                    C1, C2, C3
+                });
+            };
+        }
+
+        public void SetupCOM(string portName)
+        {
             try
             {
+                serialPort = new SerialPort(portName, 9600);
+                serialPort.DataReceived += SerialPort_DataReceived;
                 serialPort.Open();
-                MessageBox.Show("Serial port " + portName + " opened successfully.");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                MessageBox.Show("Access to the port is denied: " + ex.Message);
-            }
-            catch (IOException ex)
-            {
-                MessageBox.Show("The port is in an invalid state: " + ex.Message);
-            }
-            catch (ArgumentException ex)
-            {
-                MessageBox.Show("The port name does not begin with 'COM' or the file type of the port is not supported: " + ex.Message);
-            }
-            catch (InvalidOperationException ex)
-            {
-                MessageBox.Show("The specified port is already open: " + ex.Message);
+
+                // Send initial game mode to server only after ensuring buttons are initialized
+                this.Loaded += (s, e) =>
+                {
+                    SendCommand($"G,{MODE}");
+                };
+
+                MessageBox.Show($"Connected to {portName} successfully.");
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error opening COM port: " + ex.Message);
+                MessageBox.Show($"Error connecting to {portName}: {ex.Message}");
             }
 
             this.Closed += MainWindow_Closed;
         }
 
-        private void sendStatusToArduino(string message)
+        private void EnableAllButtons()
+        {
+            if (gameButtons == null) return;
+
+            foreach (Button button in gameButtons)
+            {
+                if (button != null)
+                {
+                    button.IsEnabled = true;
+                }
+            }
+        }
+
+        private void DisableAllButtons()
+        {
+            if (gameButtons == null) return;
+
+            foreach (Button button in gameButtons)
+            {
+                if (button != null)
+                {
+                    button.IsEnabled = false;
+                }
+            }
+        }
+
+        private void ClearAllButtons()
+        {
+            if (gameButtons == null) return;
+
+            foreach (Button button in gameButtons)
+            {
+                if (button != null)
+                {
+                    button.Content = "";
+                }
+            }
+        }
+
+        public void SendCommand(string command)
         {
             try
             {
-                if (serialPort.IsOpen)
+                if (serialPort?.IsOpen == true)
                 {
-                    serialPort.WriteLine(message);
-                }
-                else
-                {
-                    MessageBox.Show("Serial port is not open.");
+                    serialPort.WriteLine(command);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error while sending message to Arduino: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error sending command: {ex.Message}");
             }
         }
 
         private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
-            string receivedMessage = serialPort.ReadLine();
-
-            Dispatcher.Invoke(() =>
+            try
             {
-                MessageBox.Show("Arduino says: " + receivedMessage);
-            });
-        }
-
-        private void MainWindow_Closed(object sender, EventArgs e)
-        {
-            if (serialPort != null && serialPort.IsOpen)
+                string message = serialPort.ReadLine().Trim();
+                Dispatcher.Invoke(() => ProcessServerResponse(message));
+            }
+            catch (Exception ex)
             {
-                serialPort.Close();
+                Dispatcher.Invoke(() => MessageBox.Show($"Error receiving data: {ex.Message}"));
             }
         }
 
-
-        private void gameAction_Click(object sender, RoutedEventArgs e)
+        public void ProcessServerResponse(string response)
         {
-            // Y move
-            Button pressedButton = (Button)sender;
-            if (TURN)
-            {
-                pressedButton.Content = Constants.X_SYMBOL;
-                pressedButton.IsEnabled = false;
-                TURN = false;
-            }
-            else
-            {
-                pressedButton.Content = Constants.O_SYMBOL;
-                pressedButton.IsEnabled = false;
-                TURN = true;
-            }
+            string[] parts = response.Split(',');
+            string command = parts[0];
 
-            if (checkGameStatus())
+            switch (command)
             {
-                return;
-            }
+                case "A": // AI Move
+                    if (parts.Length == 3 && int.TryParse(parts[1], out int row) && int.TryParse(parts[2], out int col))
+                    {
+                        Button button = gameButtons[row * 3 + col];
+                        button.Content = TURN ? Constants.X_SYMBOL : Constants.O_SYMBOL;
+                        button.IsEnabled = false;
+                        TURN = !TURN;
+                    }
+                    break;
 
-            // Move AI if necessary
-            if (MODE == Constants.AI_EASY_MODE || MODE == Constants.AI_HARD_MODE)
+                case "W": // Winner
+                    if (parts.Length == 2)
+                    {
+                        string winner = parts[1];
+                        if (winner == Constants.X_SYMBOL)
+                        {
+                            int currentWins = Convert.ToInt32(winsX.Content);
+                            winsX.Content = (currentWins + 1).ToString();
+                        }
+                        else if (winner == Constants.O_SYMBOL)
+                        {
+                            int currentWins = Convert.ToInt32(winsO.Content);
+                            winsO.Content = (currentWins + 1).ToString();
+                        }
+                        DisableAllButtons();
+                        MessageBox.Show($"Player {winner} wins!");
+                        isAiVsAiGameActive = false;
+                        EnableAiVsAiControls();
+                    }
+                    break;
+
+                case "T": // Tie
+                    int currentTies = Convert.ToInt32(ties.Content);
+                    ties.Content = (currentTies + 1).ToString();
+                    DisableAllButtons();
+                    MessageBox.Show("Game ended in a tie!");
+                    isAiVsAiGameActive = false;
+                    EnableAiVsAiControls();
+                    break;
+
+                case "OK":
+                    // Command acknowledgment, no action needed
+                    break;
+            }
+        }
+
+        private void EnableAiVsAiControls()
+        {
+            if (MODE == Constants.AI_VS_AI_MODE)
             {
-                performAiMoveAsync();
-                TURN = true;
+                startButton.IsEnabled = true;
+                gameModeComboBox.IsEnabled = true;
             }
+        }
 
-            checkGameStatus();
+        private void DisableAiVsAiControls()
+        {
+            if (MODE == Constants.AI_VS_AI_MODE)
+            {
+                startButton.IsEnabled = false;
+                gameModeComboBox.IsEnabled = false;
+            }
+        }
+
+        public void gameAction_Click(object sender, RoutedEventArgs e)
+        {
+            Button clickedButton = (Button)sender;
+            int index = gameButtons.IndexOf(clickedButton);
+            int row = index / 3;
+            int col = index % 3;
+
+            clickedButton.Content = TURN ? Constants.X_SYMBOL : Constants.O_SYMBOL;
+            clickedButton.IsEnabled = false;
+            TURN = !TURN;
+
+            // Send move to server
+            SendCommand($"M,{row},{col}");
         }
 
         private void onRestartButton_Click(object sender, EventArgs e)
         {
-            // Restart the game
-            // Activate all buttons and reset their texts
-            foreach (Button button in gameButtons)
-            {
-                button.IsEnabled = true;
-                button.Content = "";
-            }
-
-            // Reset member variables
+            isAiVsAiGameActive = false;
+            SendCommand("R");
+            EnableAllButtons();
+            ClearAllButtons();
             TURN = true;
+            EnableAiVsAiControls();
         }
 
         private void gameModeComboBox_Click(object sender, SelectionChangedEventArgs e)
         {
-            // Get clicked item
-            int selection = gameModeComboBox.SelectedIndex;
-            MODE = selection;
-            if (startButton != null && gameModeComboBox.SelectedItem is ComboBoxItem selectedItem)
+            if (gameModeComboBox.SelectedIndex >= 0)
             {
-                startButton.IsEnabled = selectedItem.Content.ToString() == "AI vs AI";
-            }
-        }
+                isAiVsAiGameActive = false;
+                MODE = gameModeComboBox.SelectedIndex;
+                SendCommand($"G,{MODE}");
 
-        private async Task performAiMoveAsync()
-        {
-            if (MODE == Constants.AI_EASY_MODE)
-            {
-                ArtificialIntelligence.performEasyMove(gameButtons);
-            }
-            else if (MODE == Constants.AI_HARD_MODE)
-            {
-                ArtificialIntelligence.performHardMove(gameButtons);
-            }
-            else if (MODE == Constants.AI_VS_AI_MODE)
-            {
-                while (MODE == Constants.AI_VS_AI_MODE && !checkGameStatus())
+                if (startButton != null && gameModeComboBox.SelectedItem is ComboBoxItem selectedItem)
                 {
-                    if (TURN)
-                    {
-                        // AI's turn as X
-                        ArtificialIntelligence.performMove(gameButtons, Constants.X_SYMBOL);
-                        TURN = false;
-                    }
-                    else
-                    {
-                        // AI's turn as O
-                        ArtificialIntelligence.performMove(gameButtons, Constants.O_SYMBOL);
-                        TURN = true;
-                    }
-                    if (checkGameStatus()) break;
-                    await Task.Delay(500);
+                    startButton.IsEnabled = selectedItem.Content.ToString() == "AI vs AI";
                 }
+
+                EnableAllButtons();
+                ClearAllButtons();
+                TURN = true;
             }
         }
 
-        private bool checkGameStatus()
+        private void startButton_Click(object sender, RoutedEventArgs e)
         {
-            GameStatus status = checkHorizontal();
-            if (status.isGameOver())
+            if (MODE == Constants.AI_VS_AI_MODE && !isAiVsAiGameActive)
             {
-                disableGame();
-                updateStats(status);
-                sendStatusToArduino("Player " + status.winner + " has won the game!");
-                return true;
+                isAiVsAiGameActive = true;
+                DisableAiVsAiControls();
+                ClearAllButtons();
+                DisableAllButtons();
+                SendCommand("R"); // Reset the game
+                SendCommand("V"); // Start AI vs AI game
             }
-
-            status = checkVertical();
-            if (status.isGameOver())
-            {
-                disableGame();
-                updateStats(status);
-                sendStatusToArduino("Player " + status.winner + " has won the game!");
-                return true;
-            }
-
-            status = checkDiagonal();
-            if (status.isGameOver())
-            {
-                disableGame();
-                updateStats(status);
-                sendStatusToArduino("Player " + status.winner + " has won the game!");
-                return true;
-            }
-
-            if (checkForTie())
-            {
-                disableGame();
-                updateStats(new GameStatus(true, "", true));
-                sendStatusToArduino("The game ended in a tie!");
-                return true;
-            }
-
-            return false;
-        }
-
-        private void disableGame()
-        {
-            foreach (Button button in gameButtons)
-            {
-                button.IsEnabled = false;
-            }
-        }
-
-        private void updateStats(GameStatus status)
-        {
-            if (status.isGameOver())
-            {
-                if (status.getWinner().Equals(Constants.X_SYMBOL))
-                {
-                    int currentWins = Convert.ToInt32(winsX.Content);
-                    winsX.Content = "" + (currentWins + 1);
-                }
-                else if (status.getWinner().Equals(Constants.O_SYMBOL))
-                {
-                    int currentWins = Convert.ToInt32(winsO.Content);
-                    winsO.Content = "" + (currentWins + 1);
-                }
-                else if (status.isTie())
-                {
-                    int currentTies = Convert.ToInt32(ties.Content);
-                    ties.Content = "" + (currentTies + 1);
-                }
-            }
-        }
-
-        // HELPER
-        private GameStatus checkHorizontal()
-        {
-            bool gameOver = false;
-            string winner = "";
-            // Horizontal check
-            if (A1.Content.Equals(A2.Content)
-                && A1.Content.Equals(A3.Content)
-                && A2.Content.Equals(A3.Content)
-                && !A1.Content.Equals(""))
-            {
-                // Top row won
-                //MessageBox.Show("top row");
-                gameOver = true;
-                winner = Convert.ToString(A1.Content);
-            }
-            else if (B1.Content.Equals(B2.Content)
-                    && B1.Content.Equals(B3.Content)
-                    && B2.Content.Equals(B3.Content)
-                    && !B1.Content.Equals(""))
-            {
-                // Middle row won
-                //MessageBox.Show("middle row");
-                gameOver = true;
-                winner = Convert.ToString(B1.Content);
-            }
-            else if (C1.Content.Equals(C2.Content)
-                    && C1.Content.Equals(C3.Content)
-                    && C2.Content.Equals(C3.Content)
-                    && !C1.Content.Equals(""))
-            {
-                // Bottom row won
-                //MessageBox.Show("bottom row");
-                gameOver = true;
-                winner = Convert.ToString(C1.Content);
-            }
-
-            return new GameStatus(gameOver, winner, false);
-        }
-
-        private GameStatus checkVertical()
-        {
-            bool gameOver = false;
-            string winner = "";
-            // Vertical check
-            if (A1.Content.Equals(B1.Content)
-                && A1.Content.Equals(C1.Content)
-                && B1.Content.Equals(C1.Content)
-                && !A1.Content.Equals(""))
-            {
-                // Left column won
-                //MessageBox.Show("left column");
-                gameOver = true;
-                winner = Convert.ToString(A1.Content);
-            }
-            else if (A2.Content.Equals(B2.Content)
-                    && A2.Content.Equals(C2.Content)
-                    && B2.Content.Equals(C2.Content)
-                    && !A2.Content.Equals(""))
-            {
-                // Middle column won
-                //MessageBox.Show("middle column");
-                gameOver = true;
-                winner = Convert.ToString(A2.Content);
-            }
-            else if (A3.Content.Equals(B3.Content)
-                    && A3.Content.Equals(C3.Content)
-                    && B3.Content.Equals(C3.Content)
-                    && !A3.Content.Equals(""))
-            {
-                // Right column won
-                //MessageBox.Show("right column");
-                gameOver = true;
-                winner = Convert.ToString(A3.Content);
-            }
-
-            return new GameStatus(gameOver, winner, false);
-        }
-
-        private GameStatus checkDiagonal()
-        {
-            bool gameOver = false;
-            string winner = "";
-            // Diagonal check
-            if (A1.Content.Equals(B2.Content)
-                && A1.Content.Equals(C3.Content)
-                && B2.Content.Equals(C3.Content)
-                && !A1.Content.Equals(""))
-            {
-                // Top left to bottom right won
-                //MessageBox.Show("tl-br");
-                gameOver = true;
-                winner = Convert.ToString(A1.Content);
-            }
-            else if (C1.Content.Equals(B2.Content)
-                    && C1.Content.Equals(A3.Content)
-                    && B2.Content.Equals(A3.Content)
-                    && !C1.Content.Equals(""))
-            {
-                // Bottom left to top right won
-                //MessageBox.Show("bl-tr");
-                gameOver = true;
-                winner = Convert.ToString(C1.Content);
-            }
-
-            return new GameStatus(gameOver, winner, false);
-        }
-
-        private bool checkForTie()
-        {
-            bool tie = true;
-            foreach (Button button in gameButtons)
-            {
-                if (button.IsEnabled == true)
-                {
-                    tie = false;
-                    break;
-                }
-            }
-
-            return tie;
         }
 
         private void newButton_Click(object sender, RoutedEventArgs e)
         {
-            foreach (Button button in gameButtons)
-            {
-                button.IsEnabled = true;
-                button.Content = "";
-            }
-
+            SendCommand("R");
+            EnableAllButtons();
+            ClearAllButtons();
+            TURN = true;
             winsX.Content = "0";
             winsO.Content = "0";
             ties.Content = "0";
-
-            TURN = true;
         }
 
+        // Save/Load functionality remains unchanged as it's client-side only
         private void saveButton_Click(object sender, RoutedEventArgs e)
         {
-
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("[Game]");
             sb.AppendLine("Turn=" + (TURN ? "X" : "O"));
@@ -449,11 +309,13 @@ namespace TicTacToeWPF
 
                 TURN = data["Game"]["Turn"] == "X";
                 MODE = int.Parse(data["Game"]["Mode"]);
+                SendCommand($"G,{MODE}");
 
                 foreach (Button button in gameButtons)
                 {
-                    button.Content = data["Board"][button.Name];
-                    button.IsEnabled = string.IsNullOrEmpty(button.Content.ToString());
+                    string content = data["Board"][button.Name];
+                    button.Content = content;
+                    button.IsEnabled = string.IsNullOrEmpty(content);
                 }
 
                 winsX.Content = data["Stats"]["WinsX"];
@@ -468,13 +330,12 @@ namespace TicTacToeWPF
             }
         }
 
-        private void startButton_Click(object sender, RoutedEventArgs e)
+        private void MainWindow_Closed(object sender, EventArgs e)
         {
-            if (MODE == Constants.AI_VS_AI_MODE)
+            if (serialPort?.IsOpen == true)
             {
-                performAiMoveAsync();
+                serialPort.Close();
             }
-
         }
     }
 }

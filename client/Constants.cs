@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TicTacToeWPF
 {
-    class Constants
+    public class Constants
     {
         // Indices in combo box
         public const int HOT_SEAT_MODE = 0;
