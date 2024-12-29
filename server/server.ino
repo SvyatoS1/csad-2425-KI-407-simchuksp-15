@@ -1,44 +1,65 @@
 #include <Arduino.h>
 
-// Game Constants
-const char EMPTY = ' ';
-const char X_SYMBOL = 'X';
-const char O_SYMBOL = 'O';
+/** @name Game Constants
+ *  @{
+ */
+const char EMPTY = ' ';      ///< Represents an empty cell on the board
+const char X_SYMBOL = 'X';   ///< Symbol for player X
+const char O_SYMBOL = 'O';   ///< Symbol for player O
+/** @} */
 
-// Game Modes
-const int HOT_SEAT_MODE = 0;
-const int AI_EASY_MODE = 1;
-const int AI_HARD_MODE = 2;
-const int AI_VS_AI_MODE = 3;
+/** @name Game Modes
+ *  @{
+ */
+const int HOT_SEAT_MODE = 0; ///< Two players on same device
+const int AI_EASY_MODE = 1;  ///< Play against AI with random moves
+const int AI_HARD_MODE = 2;  ///< Play against AI with strategic moves
+const int AI_VS_AI_MODE = 3; ///< Watch two AIs play against each other
+/** @} */
 
-// Game State
-char board[3][3];
-int currentMode = HOT_SEAT_MODE;
-bool isXTurn = true;
-bool aiVsAiGameInProgress = false;
-int winsX = 0;
-int winsO = 0;
-int ties = 0;
+/** @name Game State Variables
+ *  @{
+ */
+char board[3][3];               ///< Game board state
+int currentMode = HOT_SEAT_MODE;///< Current game mode
+bool isXTurn = true;           ///< Tracks current player's turn
+bool aiVsAiGameInProgress = false; ///< AI vs AI game status
+int winsX = 0;                 ///< Number of X wins
+int winsO = 0;                 ///< Number of O wins
+int ties = 0;                  ///< Number of ties
+/** @} */
 
-// Command structure for serial communication
-const char CMD_MOVE = 'M';      // Move command: M,row,col
-const char CMD_MODE = 'G';      // Game mode command: G,mode
-const char CMD_RESET = 'R';     // Reset command: R
-const char CMD_STATUS = 'S';    // Status request: S
-const char CMD_AI_MOVE = 'A';   // Request AI move: A
-const char CMD_AI_VS_AI = 'V';  // New command for continuous AI vs AI play
+/** @name Command Codes
+ *  @{
+ */
+const char CMD_MOVE = 'M';     ///< Move command: M,row,col
+const char CMD_MODE = 'G';     ///< Game mode command: G,mode
+const char CMD_RESET = 'R';    ///< Reset command: R
+const char CMD_STATUS = 'S';   ///< Status request: S
+const char CMD_AI_MOVE = 'A';  ///< Request AI move: A
+const char CMD_AI_VS_AI = 'V'; ///< Start AI vs AI game: V
+/** @} */
 
-// AI Logic
+/**
+ * @struct Move
+ * @brief Represents a move on the game board
+ */
 struct Move {
-  int row;
-  int col;
+    int row; ///< Row position (0-2)
+    int col; ///< Column position (0-2)
 };
 
+/**
+ * @brief Initialize serial communication and game board
+ */
 void setup() {
   Serial.begin(9600);
   resetBoard();
 }
 
+/**
+ * @brief Reset the game board to initial state
+ */
 void resetBoard() {
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++) {
@@ -48,10 +69,22 @@ void resetBoard() {
   isXTurn = true;
 }
 
+/**
+ * @brief Check if a move is valid
+ * @param row Row position (0-2)
+ * @param col Column position (0-2)
+ * @return true if move is valid, false otherwise
+ */
 bool isValidMove(int row, int col) {
   return row >= 0 && row < 3 && col >= 0 && col < 3 && board[row][col] == EMPTY;
 }
 
+/**
+ * @brief Execute a move on the board
+ * @param row Row position (0-2)
+ * @param col Column position (0-2)
+ * @return true if move was successful, false otherwise
+ */
 bool makeMove(int row, int col) {
   if (!isValidMove(row, col)) return false;
   
@@ -60,7 +93,10 @@ bool makeMove(int row, int col) {
   return true;
 }
 
-// Check for winner
+/**
+ * @brief Check for a winner
+ * @return Winner symbol (X/O) or EMPTY if no winner
+ */
 char checkWinner() {
   // Check rows
   for (int i = 0; i < 3; i++) {
@@ -87,6 +123,10 @@ char checkWinner() {
   return EMPTY;
 }
 
+/**
+ * @brief Check if board is full
+ * @return true if board is full, false otherwise
+ */
 bool isBoardFull() {
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++) {
@@ -96,6 +136,10 @@ bool isBoardFull() {
   return true;
 }
 
+/**
+ * @brief Generate a random valid move
+ * @return Move struct containing row and column
+ */
 Move getRandomMove() {
   Move move;
   do {
@@ -105,6 +149,13 @@ Move getRandomMove() {
   return move;
 }
 
+/**
+ * @brief Check if a move would result in a win
+ * @param row Row position (0-2)
+ * @param col Column position (0-2)
+ * @param symbol Player symbol (X/O)
+ * @return true if move would win game, false otherwise
+ */
 bool isWinningMove(int row, int col, char symbol) {
   // Try the move
   board[row][col] = symbol;
@@ -113,6 +164,10 @@ bool isWinningMove(int row, int col, char symbol) {
   return isWinning;
 }
 
+/**
+ * @brief Calculate best strategic move for AI
+ * @return Move struct containing row and column
+ */
 Move getBestMove() {
   Move move;
   char currentSymbol = isXTurn ? X_SYMBOL : O_SYMBOL;
@@ -151,6 +206,9 @@ Move getBestMove() {
   return getRandomMove();
 }
 
+/**
+ * @brief Execute AI move and send to client
+ */
 void performAIMove() {
   Move move;
   if (currentMode == AI_EASY_MODE) {
@@ -167,12 +225,19 @@ void performAIMove() {
   Serial.println(move.col);
 }
 
+/**
+ * @brief Update game statistics
+ * @param winner Winner symbol (X/O) or EMPTY for tie
+ */
 void updateStats(char winner) {
   if (winner == X_SYMBOL) winsX++;
   else if (winner == O_SYMBOL) winsO++;
   else ties++;
 }
 
+/**
+ * @brief Send current game status to client
+ */
 void sendGameStatus() {
   char winner = checkWinner();
   bool gameOver = (winner != EMPTY || isBoardFull());
@@ -189,6 +254,10 @@ void sendGameStatus() {
   }
 }
 
+/**
+ * @brief Process incoming commands from client
+ * @param command Command string received via serial
+ */
 void processCommand(String command) {
   char cmd = command.charAt(0);
   command = command.substring(2); // Skip command char and comma
@@ -261,6 +330,9 @@ void processCommand(String command) {
   }
 }
 
+/**
+ * @brief Main program loop
+ */
 void loop() {
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
