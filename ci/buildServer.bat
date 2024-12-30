@@ -1,45 +1,60 @@
 @echo off
-REM Exit on error
 setlocal enabledelayedexpansion
 
 set ArduinoUNOProjectPath=..\server
 set Board=arduino:avr:uno
 set requiredCore=arduino:avr
 
-REM Check for available COM port
-for /f "tokens=*" %%i in ('powershell -Command "Get-PnpDevice | Where-Object { $_.FriendlyName -like ''USB-SERIAL CH340*'' -and $_.Status -eq ''OK'' } | ForEach-Object { $_.FriendlyName }"') do (
-    echo %%i | findstr "COM[0-9]" >nul
-    if !errorlevel! equ 0 (
-        for /f "tokens=2 delims=()" %%j in ("%%i") do set comPortNumber=%%j
-        echo Found device on port: !comPortNumber!
-        goto COM_GOOD
+where arduino-cli >nul 2>&1 || (
+    echo arduino-cli is not installed. Exiting...
+    PAUSE
+    exit /b 1
+)
+
+:: Get list of connected boards with debug output
+echo Detecting Arduino boards...
+echo.
+echo Available ports and boards:
+arduino-cli board list
+echo.
+
+:: Try to find Arduino port with more flexible detection
+set "comPort="
+for /f "tokens=1,2,3,4 delims= " %%a in ('arduino-cli board list') do (
+    echo Processing port: %%a
+    echo Board info: %%a %%b %%c %%d
+    if "%%c"=="Arduino" (
+        set "comPort=%%a"
+        echo Found Arduino on port: !comPort!
+        goto CONTINUE
     )
 )
 
-echo Connected Arduino UNO not found.
-exit /b
-
-:COM_GOOD
-REM Check if arduino-cli is installed
-where arduino-cli >nul 2>&1
-if %errorlevel% neq 0 (
-    echo arduino-cli is not installed. Exiting...
-    exit /b
+:: If automatic detection fails, allow manual input
+if not defined comPort (
+    echo.
+    echo Automatic detection failed. 
+    set /p comPort="Please enter COM port manually (e.g., COM3): "
+    if not defined comPort (
+        echo No COM port specified. Exiting...
+        PAUSE
+        exit /b 1
+    )
 )
 
-echo arduino-cli checked.
+:CONTINUE
+echo.
+echo Using port: %comPort%
+echo.
 
-REM Check if the required core is installed
+:: Check for required core
 for /f "tokens=*" %%i in ('arduino-cli core list') do (
-    set output=%%i
-    echo !output! | findstr /c:"%requiredCore%" >nul
-    if !errorlevel! equ 0 (
+    echo %%i | findstr /c:"%requiredCore%" >nul && (
         echo %requiredCore% core checked.
         goto BUILD
     )
 )
 
-REM Download core if required
 echo Core %requiredCore% is NOT installed. Installing it now...
 arduino-cli config init
 arduino-cli config set board_manager.additional_urls "https://downloads.arduino.cc/packages/package_index.json"
@@ -47,17 +62,21 @@ arduino-cli core update-index
 arduino-cli core install %requiredCore%
 
 :BUILD
-REM Build Arduino UNO Project
-echo Building Arduino UNO project...
 cd %ArduinoUNOProjectPath%
 arduino-cli compile --fqbn %Board% .
+if errorlevel 1 goto ERROR
 
-REM Upload to Arduino UNO
-echo Uploading to Arduino UNO board on port %comPortNumber%...
-arduino-cli upload -p %comPortNumber% --fqbn %Board% .
+arduino-cli upload -p %comPort% --fqbn %Board% .
+if errorlevel 1 goto ERROR
 
 cd ..\ci
 echo Server build process completed successfully.
-endlocal
+goto END
 
+:ERROR
+echo Build process failed.
+exit /b 1
+
+:END
+endlocal
 PAUSE
