@@ -211,11 +211,14 @@ Move getBestMove() {
  */
 void performAIMove() {
   Move move;
-  if (currentMode == AI_EASY_MODE) {
+  // Use appropriate AI strategy based on current player
+  if (currentMode == AI_EASY_MODE || 
+      (currentMode == AI_VS_AI_MODE && isXTurn)) { // X player uses random moves
     move = getRandomMove();
-  } else {
+  } else { // O player uses strategic moves or AI_HARD_MODE
     move = getBestMove();
   }
+  
   makeMove(move.row, move.col);
   
   // Send AI move to client
@@ -307,26 +310,31 @@ void processCommand(String command) {
       break;
       
     case CMD_AI_VS_AI:
-      if (currentMode == AI_VS_AI_MODE) {
-        aiVsAiGameInProgress = true;
-        resetBoard(); // Ensure clean board state
-        
-        while (aiVsAiGameInProgress) {
-          // Check if game should continue
-          if (checkWinner() != EMPTY || isBoardFull()) {
-            aiVsAiGameInProgress = false;
-            break;
-          }
-          
-          // Perform AI move
-          performAIMove();
-          sendGameStatus();
-          
-          // Add delay between moves
-          delay(1000);
-        }
+  if (currentMode == AI_VS_AI_MODE) {
+    aiVsAiGameInProgress = true;
+    resetBoard(); // Ensure clean board state
+    
+    // First move (X's turn)
+    performAIMove();
+    sendGameStatus();
+    
+    while (aiVsAiGameInProgress) {
+      // Check if game should continue
+      if (checkWinner() != EMPTY || isBoardFull()) {
+        aiVsAiGameInProgress = false;
+        break;
       }
-      break;
+      
+      delay(1000); // Delay between moves
+      
+      // Only make next move if game is still in progress
+      if (aiVsAiGameInProgress) {
+        performAIMove();
+        sendGameStatus();
+      }
+    }
+  }
+  break;
   }
 }
 

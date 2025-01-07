@@ -143,10 +143,12 @@ namespace TicTacToeWPF
                 case "A": // AI Move
                     if (parts.Length == 3 && int.TryParse(parts[1], out int row) && int.TryParse(parts[2], out int col))
                     {
-                        Button button = gameButtons[row * 3 + col];
-                        button.Content = TURN ? Constants.X_SYMBOL : Constants.O_SYMBOL;
-                        button.IsEnabled = false;
-                        TURN = !TURN;
+                        Dispatcher.Invoke(() => {
+                            Button button = gameButtons[row * 3 + col];
+                            button.Content = TURN ? Constants.X_SYMBOL : Constants.O_SYMBOL;
+                            button.IsEnabled = false;
+                            TURN = !TURN;
+                        });
                     }
                     break;
 
@@ -154,34 +156,34 @@ namespace TicTacToeWPF
                     if (parts.Length == 2)
                     {
                         string winner = parts[1];
-                        if (winner == Constants.X_SYMBOL)
-                        {
-                            int currentWins = Convert.ToInt32(winsX.Content);
-                            winsX.Content = (currentWins + 1).ToString();
-                        }
-                        else if (winner == Constants.O_SYMBOL)
-                        {
-                            int currentWins = Convert.ToInt32(winsO.Content);
-                            winsO.Content = (currentWins + 1).ToString();
-                        }
-                        DisableAllButtons();
-                        MessageBox.Show($"Player {winner} wins!");
-                        isAiVsAiGameActive = false;
-                        EnableAiVsAiControls();
+                        Dispatcher.Invoke(() => {
+                            if (winner == Constants.X_SYMBOL)
+                            {
+                                int currentWins = Convert.ToInt32(winsX.Content);
+                                winsX.Content = (currentWins + 1).ToString();
+                            }
+                            else if (winner == Constants.O_SYMBOL)
+                            {
+                                int currentWins = Convert.ToInt32(winsO.Content);
+                                winsO.Content = (currentWins + 1).ToString();
+                            }
+                            DisableAllButtons();
+                            MessageBox.Show($"Player {winner} wins!");
+                            isAiVsAiGameActive = false;
+                            EnableAiVsAiControls();
+                        });
                     }
                     break;
 
                 case "T": // Tie
-                    int currentTies = Convert.ToInt32(ties.Content);
-                    ties.Content = (currentTies + 1).ToString();
-                    DisableAllButtons();
-                    MessageBox.Show("Game ended in a tie!");
-                    isAiVsAiGameActive = false;
-                    EnableAiVsAiControls();
-                    break;
-
-                case "OK":
-                    // Command acknowledgment, no action needed
+                    Dispatcher.Invoke(() => {
+                        int currentTies = Convert.ToInt32(ties.Content);
+                        ties.Content = (currentTies + 1).ToString();
+                        DisableAllButtons();
+                        MessageBox.Show("Game ended in a tie!");
+                        isAiVsAiGameActive = false;
+                        EnableAiVsAiControls();
+                    });
                     break;
             }
         }
@@ -262,6 +264,7 @@ namespace TicTacToeWPF
                 DisableAiVsAiControls();
                 ClearAllButtons();
                 DisableAllButtons();
+                TURN = true; // Reset turn to X
                 SendCommand("R"); // Reset the game
                 SendCommand("V"); // Start AI vs AI game
             }
