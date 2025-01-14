@@ -50,7 +50,9 @@ struct Move {
 };
 
 /**
- * @brief Initialize serial communication and game board
+ * @brief Main setup function for Arduino.
+ *
+ * Initializes the Serial Monitor and the game board.
  */
 void setup() {
   Serial.begin(9600);
@@ -94,8 +96,9 @@ bool makeMove(int row, int col) {
 }
 
 /**
- * @brief Check for a winner
- * @return Winner symbol (X/O) or EMPTY if no winner
+ * @brief Checks if the game has been won by the current player.
+ *
+ * @return True if the current player has won, otherwise false.
  */
 char checkWinner() {
   // Check rows
@@ -124,8 +127,9 @@ char checkWinner() {
 }
 
 /**
- * @brief Check if board is full
- * @return true if board is full, false otherwise
+ * @brief Checks if the game board is full.
+ *
+ * @return True if the board is full, otherwise false.
  */
 bool isBoardFull() {
   for (int i = 0; i < 3; i++) {
@@ -339,7 +343,9 @@ void processCommand(String command) {
 }
 
 /**
- * @brief Main program loop
+ * @brief Main loop function for Arduino.
+ *
+ * Contains the game logic, including player input, win detection, and turn switching.
  */
 void loop() {
   if (Serial.available() > 0) {

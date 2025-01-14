@@ -1,78 +1,164 @@
 @echo off
-REM Exit on error
 setlocal enabledelayedexpansion
 
-set ArduinoProjectPath=..\test_server
-set Board=arduino:avr:uno
-set requiredCore=arduino:avr
+:: Configuration
+set "ArduinoProjectPath=..\test_server"
+set "Board=arduino:avr:uno"
+set "RequiredCore=arduino:avr"
 
-REM Check if arduino-cli is installed
+echo Starting test report generation...
+echo.
+
+:: Check prerequisites
+call :check_prerequisites
+if !errorlevel! neq 0 exit /b 1
+
+:: Find COM port
+call :find_com_port
+if !errorlevel! neq 0 exit /b 1
+
+:: Build and upload
+call :build_and_upload
+if !errorlevel! neq 0 exit /b 1
+
+:: Run tests
+call :run_tests
+if !errorlevel! neq 0 exit /b 1
+
+echo.
+echo Test process completed successfully!
+echo Press any key to exit...
+pause >nul
+exit /b 0
+
+:check_prerequisites
+echo Checking prerequisites...
+
+:: Check for arduino-cli
 where arduino-cli >nul 2>&1
 if %errorlevel% neq 0 (
-    echo arduino-cli is not installed. Exiting...
-    exit /b
+    echo ERROR: arduino-cli is not installed
+    echo Please install arduino-cli and try again.
+    pause
+    exit /b 1
 )
 
-echo arduino-cli checked.
+:: Check Python installation
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: Python is not installed or not in PATH
+    echo Please install Python and add it to your PATH.
+    pause
+    exit /b 1
+)
 
-REM Check for available COM port
+:: Check pip installation
+pip --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Installing pip...
+    python -m ensurepip --upgrade
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to install pip
+        echo Failed to install pip. Please install it manually.
+        pause
+        exit /b 1
+    )
+)
+
+:: Check required Arduino core
+for /f "tokens=*" %%i in ('arduino-cli core list') do (
+    echo %%i | findstr /c:"%RequiredCore%" >nul
+    if !errorlevel! equ 0 (
+        echo %RequiredCore% core is installed
+        exit /b 0
+    )
+)
+
+:: Install required core if not found
+echo Installing %RequiredCore% core...
+echo This may take a few minutes...
+arduino-cli config init
+arduino-cli core update-index
+arduino-cli core install %RequiredCore%
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install Arduino core
+    echo Failed to install Arduino core. Please try again or install manually.
+    pause
+    exit /b 1
+)
+
+exit /b 0
+
+:find_com_port
+echo Searching for Arduino board...
+
+set "comPortFound=false"
 for /f "tokens=1,2 delims= " %%i in ('arduino-cli board list') do (
     echo %%i | findstr "COM[0-9]" >nul
     if !errorlevel! equ 0 (
-        set comPortNumber=%%i
+        set "comPortNumber=%%i"
+        set "comPortFound=true"
         echo Found device on port: !comPortNumber!
-        goto COM_GOOD
+        exit /b 0
     )
 )
 
-echo Connected board not found.
-exit /b
-
-:COM_GOOD
-REM Check if the required core is installed
-for /f "tokens=*" %%i in ('arduino-cli core list') do (
-    set output=%%i
-    echo !output! | findstr /c:"%requiredCore%" >nul
-    if !errorlevel! equ 0 (
-	echo %requiredCore% core checked.
-        goto BUILD
-    )
+if "%comPortFound%"=="false" (
+    echo ERROR: No Arduino board found
+    echo Please connect your Arduino board and try again.
+    pause
+    exit /b 1
 )
 
-echo Core %requiredCore% is NOT installed. Installing it now...
-arduino-cli config init
-arduino-cli core update-index
-arduino-cli core install %requiredCore%
+exit /b 0
 
-:BUILD
-echo Building Tests...
-cd %ArduinoProjectPath%
+:build_and_upload
+echo Building project...
+cd "%ArduinoProjectPath%"
+
+:: Clean build directory
+if exist "build" rd /s /q "build"
+
+:: Compile sketch
+echo Compiling sketch...
 arduino-cli compile --fqbn %Board% .
+if %errorlevel% neq 0 (
+    echo ERROR: Compilation failed
+    cd ..\ci
+    echo Check the error messages above.
+    pause
+    exit /b 1
+)
 
-echo Uploading bytecode to the board on port %comPortNumber%...
+echo Uploading to board...
 arduino-cli upload -p %comPortNumber% --fqbn %Board% .
+if %errorlevel% neq 0 (
+    echo ERROR: Upload failed
+    cd ..\ci
+    echo Make sure the board is properly connected.
+    pause
+    exit /b 1
+)
 
 cd ..\ci
+exit /b 0
 
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo Python is not installed or not in PATH. Please install Python and try again.
-    exit /b
-)
-
-pip --version >nul 2>&1
-if errorlevel 1 (
-    echo pip is not installed. Installing pip...
-    python -m ensurepip --upgrade
-    if errorlevel 1 (
-        echo Failed to install pip. Please install pip and try again.
-        exit /b
-    )
-)
-
-REM Install python dependencies and read serial output from board by python script.
+:run_tests
+echo Installing Python dependencies...
 pip install -r pyRequirements.txt
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install Python dependencies
+    pause
+    exit /b 1
+)
+
+echo Running tests...
 python readSerial.py %comPortNumber%
-echo Test process completed successfully.
-endlocal
-PAUSE
+if %errorlevel% neq 0 (
+    echo ERROR: Test execution failed
+    echo Check the error messages above.
+    pause
+    exit /b 1
+)
+
+exit /b 0

@@ -1,6 +1,5 @@
 @echo off
 setlocal enabledelayedexpansion
-
 set ArduinoUNOProjectPath=..\server
 set Board=arduino:avr:uno
 set requiredCore=arduino:avr
@@ -18,28 +17,26 @@ echo Available ports and boards:
 arduino-cli board list
 echo.
 
-:: Try to find Arduino port with more flexible detection
+:: Try to find Arduino Uno port with simpler parsing
 set "comPort="
-for /f "tokens=1,2,3,4 delims= " %%a in ('arduino-cli board list') do (
-    echo Processing port: %%a
-    echo Board info: %%a %%b %%c %%d
-    if "%%c"=="Arduino" (
+for /f "tokens=1,5,6" %%a in ('arduino-cli board list ^| findstr "arduino:avr:uno"') do (
+    set "comPort=%%a"
+    echo Found Arduino Uno on port !comPort!
+    goto CONTINUE
+)
+
+:: If we haven't found it yet, try a different approach
+if not defined comPort (
+    for /f "tokens=1" %%a in ('arduino-cli board list ^| findstr "Arduino Uno"') do (
         set "comPort=%%a"
-        echo Found Arduino on port: !comPort!
+        echo Found Arduino Uno on port !comPort!
         goto CONTINUE
     )
 )
 
-:: If automatic detection fails, allow manual input
 if not defined comPort (
-    echo.
-    echo Automatic detection failed. 
-    set /p comPort="Please enter COM port manually (e.g., COM3): "
-    if not defined comPort (
-        echo No COM port specified. Exiting...
-        PAUSE
-        exit /b 1
-    )
+    echo No Arduino Uno found. Exiting...
+    exit /b 1
 )
 
 :CONTINUE
@@ -65,10 +62,8 @@ arduino-cli core install %requiredCore%
 cd %ArduinoUNOProjectPath%
 arduino-cli compile --fqbn %Board% .
 if errorlevel 1 goto ERROR
-
 arduino-cli upload -p %comPort% --fqbn %Board% .
 if errorlevel 1 goto ERROR
-
 cd ..\ci
 echo Server build process completed successfully.
 goto END
